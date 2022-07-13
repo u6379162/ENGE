@@ -6,8 +6,8 @@ import signal
 
 pulse_pin = 37
 direction_pin = 10
-killswitch = 15
-home_switch = 40
+killswitch = 40
+home_switch = 15
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(pulse_pin, GPIO.OUT, initial= GPIO.HIGH)
@@ -15,8 +15,13 @@ GPIO.setup(direction_pin, GPIO.OUT)
 GPIO.setup(killswitch, GPIO.IN)
 GPIO.setup(home_switch, GPIO.IN)
 global has_homed
+global limit_reached
 
 has_homed = False
+limit_reached = False
+
+
+
 
 def signal_handler(sig, frame):
     GPIO.cleanup()
@@ -31,6 +36,8 @@ def overshoot(x):
     print('STOP: Detector has exceeded limit of operations')
     GPIO.output(pulse_pin, GPIO.LOW)
     print('stopped')
+    global limit_reached
+    limit_reached = True
 
 def homing():
     GPIO.add_event_detect(home_switch, GPIO.FALLING, callback=homed, bouncetime = 100)
@@ -41,7 +48,7 @@ def homing():
 
 def check_value(value, current):
     final_value = current + value
-    if final_value < 0:
+    if final_value < -100:
         result = False
     elif final_value > 10000:
         result = False
@@ -71,31 +78,40 @@ def save_value(value, direction):
         current = 0
     file.write(str(current))
     file.close()
-    print("Postion is now:", current)
+
     
 
 def move_forward_1(steps):
     GPIO.output(direction_pin, GPIO.LOW)
-    x = 1
-
-    while x<steps*320+1:
-        GPIO.output(pulse_pin, GPIO.LOW)
-        time.sleep(.001)
-        GPIO.output(pulse_pin, GPIO.HIGH)
-        time.sleep(.001)
-        x = x+1
-    GPIO.output(direction_pin, GPIO.HIGH)
+    
+    if limit_reached == False:   
+        x = 1
+        while x<steps*320+1:
+            GPIO.output(pulse_pin, GPIO.LOW)
+            time.sleep(.001)
+            GPIO.output(pulse_pin, GPIO.HIGH)
+            time.sleep(.001)
+            x = x+1
+        GPIO.output(direction_pin, GPIO.HIGH)
+        save_value(steps, 'F')
         
 def move_back_1(steps):
     GPIO.output(direction_pin,GPIO.HIGH)
-    x = 1
-    while x<320*steps+1:
-        GPIO.output(pulse_pin, GPIO.HIGH)
-        time.sleep(0.001)
-        GPIO.output(pulse_pin, GPIO.LOW)
-        time.sleep(0.001)
-        x = x+1
-        
+    
+    if limit_reached == False:
+        x = 1
+        print('test')
+        while x<320*steps+1:
+            GPIO.output(pulse_pin, GPIO.HIGH)
+            time.sleep(0.001)
+            GPIO.output(pulse_pin, GPIO.LOW)
+            time.sleep(0.001)
+            x = x+1
+        save_value(steps, 'B')
+        print('step')
+
+
+GPIO.add_event_detect(killswitch, GPIO.FALLING, callback= overshoot, bouncetime=100)
 if __name__ =='__main__':
     while(True):
         current = get_current()
@@ -106,16 +122,16 @@ if __name__ =='__main__':
         print('===============================')
         
         direction = input()
-        GPIO.add_event_detect(killswitch, GPIO.FALLING, callback= overshoot)
+
         
         if direction == 'F':
             print('How much (0.1mm)')
             value = input()
             allowed = check_value(int(value), current)
+            
             if allowed == True:
                 move_forward_1(int(value))
                 print('Moved forward:', value)
-                save_value(value, direction)
             elif allowed == False:
                 print("Operation not allowed: will breach limit of movement")
         
@@ -126,7 +142,6 @@ if __name__ =='__main__':
             if allowed == True:
                 move_back_1(int(value))
                 print('Moved forward:', value)
-                save_value(value, direction)
             elif allowed == False:
                 print("Operation not allowed: will breach limit of movement")
         
