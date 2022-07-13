@@ -6,7 +6,7 @@ import signal
 
 pulse_pin = 37
 direction_pin = 40
-killswitch = test
+killswitch = testing
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(pulse_pin, GPIO.OUT, initial= GPIO.HIGH)
